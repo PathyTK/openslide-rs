@@ -11,6 +11,10 @@ use crate::{
 use image::{RgbImage, RgbaImage};
 use std::borrow::Borrow;
 
+use crate::union::UnionFind;
+use crate::stains::StainingType;
+use crate::stains::is_pixel_colored;
+
 impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
     pub fn new(slide: B, tile_size: u32, overlap: u32, limit_bounds: bool) -> Result<Self> {
         let nb_level = slide.borrow().get_level_count()?;
@@ -262,6 +266,124 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         };
 
         Ok((region, z_size))
+    }
+
+    pub fn get_tile_thumbnail(&self, size: &Size) -> Result<RgbaImage> {
+        self.slide.borrow().thumbnail_rgba(size)
+    }
+
+    pub fn get_level_dimension(&self, level: u32) -> Result<Size> {
+        self.slide.borrow().get_level_dimensions(level)
+    }
+
+    // Get image bounds from the slide ignoring background regions
+    pub fn get_image_rect_bounds(&self) -> Result<Vec<Region>> {
+        let thumbnail = self.get_tile_thumbnail(&Size { w: 512, h: 512 }).unwrap();
+        let width = thumbnail.width() as usize;
+        let height = thumbnail.height() as usize;
+        let mut uf = UnionFind::new(width * height);
+        let mut colored_pixels = vec![false; width * height];
+
+        // Mark colored pixels
+        for y in 0..height {
+            for x in 0..width {
+                let pixel = thumbnail.get_pixel(x as u32, y as u32);
+                if is_pixel_colored(pixel, StainingType::HAndE) {
+                    colored_pixels[y * width + x] = true;
+                }
+            }
+        }
+
+        // Union adjacent colored pixels
+        for y in 0..height {
+            for x in 0..width {
+                if colored_pixels[y * width + x] {
+                    if x > 0 && colored_pixels[y * width + (x - 1)] {
+                        uf.union(y * width + x, y * width + (x - 1));
+                    }
+                    if y > 0 && colored_pixels[(y - 1) * width + x] {
+                        uf.union(y * width + x, (y - 1) * width + x);
+                    }
+                }
+            }
+        }
+
+        // Extract bounding boxes for connected components
+        let mut component_map = std::collections::HashMap::new();
+        for y in 0..height {
+            for x in 0..width {
+                if colored_pixels[y * width + x] {
+                    let root = uf.find(y * width + x);
+                    let entry = component_map.entry(root).or_insert((x, y, x, y));
+                    entry.0 = entry.0.min(x);
+                    entry.1 = entry.1.min(y);
+                    entry.2 = entry.2.max(x);
+                    entry.3 = entry.3.max(y);
+                }
+            }
+        }
+
+        // Convert bounding boxes to Regions
+        let mut regions = Vec::new();
+        for (_, (min_x, min_y, max_x, max_y)) in component_map {
+            let region_width = (max_x - min_x + 1) as u32;
+            let region_height = (max_y - min_y + 1) as u32;
+
+            // if the bounding box is considered big enough
+            if region_width >= 20 && region_height >= 20 {
+                let bounding_box = Region {
+                    address: Address {
+                        x: min_x as u32,
+                        y: min_y as u32,
+                    },
+                    level: 0,
+                    size: Size {
+                        w: region_width,
+                        h: region_height,
+                    },
+                };
+
+                let bounding_box_conv = self
+                    .convert_thumbnail_to_level0(bounding_box.address, bounding_box.size)
+                    .unwrap();
+                regions.push(bounding_box_conv);
+            }
+        }
+        Ok(regions)
+    }
+
+    fn convert_thumbnail_to_level0(
+        &self,
+        thumbnail_coords: Address,
+        thumbnail_size: Size,
+    ) -> Result<Region> {
+        // Get dimensions of the highest resolution level (level 0)
+        let level0_dimensions = self.slide_level_dimensions[0];
+        let thumbnail_dimensions = Size { w: 512, h: 512 };
+
+        // Calculate the downsampling factors
+        let downsample_factor_x = level0_dimensions.w as f32 / thumbnail_dimensions.w as f32;
+        let downsample_factor_y = level0_dimensions.h as f32 / thumbnail_dimensions.h as f32;
+
+        // Convert thumbnail coordinates to level 0 coordinates
+        let level0_coords = Address {
+            x: (thumbnail_coords.x as f32 * downsample_factor_x).round() as u32,
+            y: (thumbnail_coords.y as f32 * downsample_factor_y).round() as u32,
+        };
+
+        // Convert thumbnail size to level 0 size
+        let level0_size = Size {
+            w: (thumbnail_size.w as f32 * downsample_factor_x).round() as u32,
+            h: (thumbnail_size.h as f32 * downsample_factor_y).round() as u32,
+        };
+
+        let region = Region {
+            address: level0_coords,
+            level: 0,
+            size: level0_size,
+        };
+
+        Ok(region)
     }
 }
 

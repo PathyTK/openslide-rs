@@ -364,4 +364,8 @@ impl Slide for OpenSlide {
     fn read_image_rgb(&self, region: &Region) -> Result<RgbImage> {
         self.read_image_rgb(region)
     }
+
+    fn thumbnail_rgba(&self, size: &Size) -> Result<RgbaImage> {
+        self.thumbnail_rgba(size)
+    }
 }

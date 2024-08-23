@@ -20,6 +20,9 @@ pub mod properties;
 pub mod traits;
 mod utils;
 mod wrapper;
+mod union;
+
+pub mod stains;
 
 /// The corresponding result type used by the crate.
 pub type Result<T, E = errors::OpenSlideError> = std::result::Result<T, E>;
