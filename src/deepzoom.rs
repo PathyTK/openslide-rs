@@ -276,6 +276,22 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         self.slide.borrow().get_level_dimensions(level)
     }
 
+    pub fn convert_point_to_level0(&self, level: u32, point: Address) -> Result<Address> {
+        if level as usize >= self.level_count() {
+            return Err(OpenSlideError::CoreError("Invalid level".to_string()));
+        }
+    
+        // Calculate downsampling factor for the specified level to level 0
+        let downsample_factor = self.l_z_downsamples[level as usize];
+    
+        // Convert the point using the downsampling factor and offset
+        let level0_x = (downsample_factor * point.x as f64 + self.l0_offset.x as f64).round() as u32;
+        let level0_y = (downsample_factor * point.y as f64 + self.l0_offset.y as f64).round() as u32;
+    
+        Ok(Address { x: level0_x, y: level0_y })
+    }
+    
+
     // Get image bounds from the slide ignoring background regions
     pub fn get_image_rect_bounds(&self) -> Result<Vec<Region>> {
         let thumbnail = self.get_tile_thumbnail(&Size { w: 512, h: 512 }).unwrap();
