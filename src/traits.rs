@@ -48,4 +48,10 @@ pub trait Slide {
     ///     size: (width, height) in pixels of the thumbnail
     #[cfg(feature = "image")]
     fn thumbnail_rgba(&self, size: &Size) -> Result<RgbaImage>;
+
+    /// Get a RGB image thumbnail of desired size of the whole slide image.
+    /// Args:
+    ///     size: (width, height) in pixels of the thumbnail
+    #[cfg(feature = "image")]
+    fn thumbnail_rgb(&self, size: &Size) -> Result<RgbImage>;
 }

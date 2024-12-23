@@ -272,6 +272,10 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         self.slide.borrow().thumbnail_rgba(size)
     }
 
+    pub fn get_tile_thumbnail_rgb(&self, size: &Size) -> Result<RgbImage> {
+        self.slide.borrow().thumbnail_rgb(size)
+    }
+
     pub fn get_level_dimension(&self, level: u32) -> Result<Size> {
         self.slide.borrow().get_level_dimensions(level)
     }
