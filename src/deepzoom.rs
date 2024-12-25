@@ -145,6 +145,17 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         &self.level_dimensions
     }
 
+    pub fn levels_available(&self) -> Vec<u32> {
+        let mut levels = Vec::new();
+        (0..self.level_count as u32).for_each(
+            |level| match self.slide.borrow().get_level_dimensions(level) {
+                Ok(_) => levels.push(level),
+                Err(_) => (),
+            },
+        );
+        levels
+    }
+
     pub fn tile_count(&self) -> u32 {
         self.level_tiles.iter().map(|&size| size.w * size.h).sum()
     }
