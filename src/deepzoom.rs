@@ -149,6 +149,44 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         self.l0_l_downsamples.to_vec()
     }
 
+    // get scale
+
+    /// Returns the scale in micro meters for a given Deep Zoom level.
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - The Deep Zoom level for which to calculate the scale.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(f64)` - The scale in micro meters representing the physical length per pixel at the given level.
+    /// * `Err(OpenSlideError)` - If the level is invalid or physical dimensions are unavailable.
+    pub fn get_scale_in_micro_meters(&self, level: u32) -> Result<f64, OpenSlideError> {
+        // Validate the zoom level
+        if (level as usize) >= self.level_count {
+            return Err(OpenSlideError::CoreError("Invalid Deep Zoom level".to_string()));
+        }
+        // Retrieve the downsample factor for the given level
+        let downsample_factor = self.l_z_downsamples[level as usize];
+
+        // Retrieve physical dimensions of the slide at level 0 (assuming in micrometers)
+        let physical_width_um = self.slide_level_dimensions[0].w as f64;
+        let physical_height_um = self.slide_level_dimensions[0].h as f64;
+
+        // Retrieve pixel dimensions at level 0
+        let level0_dimensions = &self.slide_level_dimensions[0];
+        let pixel_width_level0 = physical_width_um / level0_dimensions.w as f64; // µm per pixel
+        let pixel_height_level0 = physical_height_um / level0_dimensions.h as f64; // µm per pixel
+
+        // Assuming square pixels, you can average or choose one
+        let pixel_size_um = (pixel_width_level0 + pixel_height_level0) / 2.0;
+
+        // Calculate physical pixel length at the given zoom level
+        let physical_pixel_length_um = pixel_size_um * downsample_factor;
+        Ok(physical_pixel_length_um)
+    }
+
+
     pub fn tile_count(&self) -> u32 {
         self.level_tiles.iter().map(|&size| size.w * size.h).sum()
     }
