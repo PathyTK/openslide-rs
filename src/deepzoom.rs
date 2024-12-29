@@ -342,7 +342,7 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         })
     }
 
-    pub fn get_image_rect_boundslevel0(&self) -> Result<Vec<Region>> {
+    pub fn get_image_rect_boundslevel0(&self) -> Result<ColoredRegions> {
         let thumbnail = self.get_tile_thumbnail(&Size { w: 512, h: 512 }).unwrap();
         let width = thumbnail.width() as usize;
         let height = thumbnail.height() as usize;
@@ -411,7 +411,10 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
                 regions.push(bounding_box);
             }
         }
-        Ok(regions)
+        Ok(ColoredRegions{
+            regions: regions,
+            colored_pixels: colored_pixels,
+        })
     }
 
     // Get image bounds from the slide ignoring background regions
@@ -526,6 +529,10 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
     }
 }
 
+pub struct ColoredRegions {
+    pub regions: Vec<Region>,
+    pub colored_pixels: Vec<bool>,
+}
 pub struct Bounds {
     pub x: Option<u32>,
     pub y: Option<u32>,
