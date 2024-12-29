@@ -10,7 +10,7 @@ use crate::{
 };
 use image::{RgbImage, RgbaImage};
 use std::borrow::Borrow;
-
+use std::collections::HashSet;
 use crate::stains::is_pixel_colored;
 use crate::stains::StainingType;
 use crate::union::UnionFind;
@@ -145,7 +145,7 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         &self.level_dimensions
     }
 
-    pub fn level_slides(&self) -> Vec<f64>{
+    pub fn level_slides(&self) -> Vec<f64> {
         self.l0_l_downsamples.to_vec()
     }
 
@@ -347,45 +347,46 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         let width = thumbnail.width() as usize;
         let height = thumbnail.height() as usize;
         let mut uf = UnionFind::new(width * height);
-        let mut colored_pixels = vec![false; width * height];
+        let mut colored_pixels = HashSet::new();
 
         // Mark colored pixels
         for y in 0..height {
             for x in 0..width {
                 let pixel = thumbnail.get_pixel(x as u32, y as u32);
                 if is_pixel_colored(pixel, StainingType::HAndE) {
-                    colored_pixels[y * width + x] = true;
+                    colored_pixels.insert((x, y));
                 }
             }
         }
 
         // Union adjacent colored pixels
-        for y in 0..height {
-            for x in 0..width {
-                if colored_pixels[y * width + x] {
-                    if x > 0 && colored_pixels[y * width + (x - 1)] {
-                        uf.union(y * width + x, y * width + (x - 1));
-                    }
-                    if y > 0 && colored_pixels[(y - 1) * width + x] {
-                        uf.union(y * width + x, (y - 1) * width + x);
-                    }
-                }
+        for &(x, y) in &colored_pixels {
+            let current_index = y * width + x;
+
+            // Check and union with left neighbor
+            if x > 0 && colored_pixels.contains(&(x - 1, y)) {
+                let left_index = y * width + (x - 1);
+                uf.union(current_index, left_index);
+            }
+
+            // Check and union with top neighbor
+            if y > 0 && colored_pixels.contains(&(x, y - 1)) {
+                let top_index = (y - 1) * width + x;
+                uf.union(current_index, top_index);
             }
         }
 
         // Extract bounding boxes for connected components
         let mut component_map = std::collections::HashMap::new();
-        for y in 0..height {
-            for x in 0..width {
-                if colored_pixels[y * width + x] {
-                    let root = uf.find(y * width + x);
-                    let entry = component_map.entry(root).or_insert((x, y, x, y));
-                    entry.0 = entry.0.min(x);
-                    entry.1 = entry.1.min(y);
-                    entry.2 = entry.2.max(x);
-                    entry.3 = entry.3.max(y);
-                }
-            }
+        for &(x, y) in &colored_pixels {
+            let root = uf.find(y * width + x);
+
+            // Update the bounding box for the connected component
+            let entry = component_map.entry(root).or_insert((x, y, x, y));
+            entry.0 = entry.0.min(x); // min_x
+            entry.1 = entry.1.min(y); // min_y
+            entry.2 = entry.2.max(x); // max_x
+            entry.3 = entry.3.max(y); // max_y
         }
 
         // Convert bounding boxes to Regions
@@ -411,7 +412,7 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
                 regions.push(bounding_box);
             }
         }
-        Ok(ColoredRegions{
+        Ok(ColoredRegions {
             regions: regions,
             colored_pixels: colored_pixels,
         })
@@ -531,7 +532,7 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
 
 pub struct ColoredRegions {
     pub regions: Vec<Region>,
-    pub colored_pixels: Vec<bool>,
+    pub colored_pixels: HashSet<(usize, usize)>,
 }
 pub struct Bounds {
     pub x: Option<u32>,
