@@ -342,6 +342,25 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         })
     }
 
+    pub fn get_colored_pixels(&self) -> HashSet<(usize, usize)> {
+        let thumbnail = self.get_tile_thumbnail(&Size { w: 512, h: 512 }).unwrap();
+        let width = thumbnail.width() as usize;
+        let height = thumbnail.height() as usize;
+        let mut uf = UnionFind::new(width * height);
+        let mut colored_pixels = HashSet::new();
+        // Mark colored pixels
+        for y in 0..height {
+            for x in 0..width {
+                let pixel = thumbnail.get_pixel(x as u32, y as u32);
+                if is_pixel_colored(pixel, StainingType::HAndE) {
+                    colored_pixels.insert((x, y));
+                }
+            }
+        }
+
+        colored_pixels
+    }
+
     pub fn get_image_rect_boundslevel0(&self) -> Result<ColoredRegions> {
         let thumbnail = self.get_tile_thumbnail(&Size { w: 512, h: 512 }).unwrap();
         let width = thumbnail.width() as usize;
@@ -495,7 +514,7 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         Ok(regions)
     }
 
-    fn convert_thumbnail_to_level0(
+    pub fn convert_thumbnail_to_level0(
         &self,
         thumbnail_coords: Address,
         thumbnail_size: Size,
