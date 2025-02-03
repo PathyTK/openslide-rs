@@ -10,7 +10,7 @@ use crate::{
 };
 use image::{RgbImage, RgbaImage};
 use std::borrow::Borrow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use crate::stains::is_pixel_colored;
 use crate::stains::StainingType;
 use crate::union::UnionFind;
@@ -346,7 +346,6 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         let thumbnail = self.get_tile_thumbnail(&Size { w: 512, h: 512 }).unwrap();
         let width = thumbnail.width() as usize;
         let height = thumbnail.height() as usize;
-        let mut uf = UnionFind::new(width * height);
         let mut colored_pixels = HashSet::new();
         // Mark colored pixels
         for y in 0..height {
@@ -360,6 +359,123 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
 
         colored_pixels
     }
+
+
+    // scan through the colored lines on thumbnail then convert
+    pub fn get_stained_columns_level0(&self) -> HashMap<usize, Vec<(usize, usize)>> {
+        let thumbnail = self.get_tile_thumbnail(&Size { w: 512, h: 512 }).unwrap();
+        let width = thumbnail.width() as usize;
+        let height = thumbnail.height() as usize;
+
+        let mut colored_columns: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
+
+        for x in 0..width {
+            let mut y1 = 0;
+            let mut y2 = 0;
+            let mut background_count = 0;
+            let mut in_colored_region = false;
+
+            for y in 0..height {
+                let pixel = thumbnail.get_pixel(x as u32, y as u32);
+
+                if is_pixel_colored(pixel, StainingType::HAndE) {
+                    if !in_colored_region {
+                        // Start of a new colored region
+                        y1 = y;
+                        in_colored_region = true;
+                    }
+                    // Once we see a colored pixel, reset the background counter
+                    background_count = 0;
+                } else {
+                    // Pixel is not colored
+                    if in_colored_region {
+                        // We are currently in a colored region, so increment background count
+                        background_count += 1;
+
+                        // If background_count is large enough, finalize the region
+                        if background_count > 20 {
+                            // y2 is the last valid colored pixel row ~20 pixels ago
+                            // Use saturating_sub to avoid negative if y < 20
+                            let candidate_y2 = y.saturating_sub(20);
+
+                            // If region is large enough, push it
+                            if candidate_y2 > y1 + 10 {
+                                let level0_x = self
+                                    .convert_point_from_thumbnail_to_level0(Address {
+                                        x: x as u32,
+                                        y: y1 as u32,
+                                    })
+                                    .unwrap()
+                                    .x;
+                                let level0_y1 = self
+                                    .convert_point_from_thumbnail_to_level0(Address {
+                                        x: x as u32,
+                                        y: y1 as u32,
+                                    })
+                                    .unwrap()
+                                    .y;
+                                let level0_y2 = self
+                                    .convert_point_from_thumbnail_to_level0(Address {
+                                        x: x as u32,
+                                        y: candidate_y2 as u32,
+                                    })
+                                    .unwrap()
+                                    .y;
+
+                                colored_columns
+                                    .entry(level0_x as usize)
+                                    .or_insert_with(Vec::new)
+                                    .push((level0_y1 as usize, level0_y2 as usize));
+                            }
+
+                            // Reset state
+                            y1 = 0;
+                            y2 = 0;
+                            background_count = 0;
+                            in_colored_region = false;
+                        }
+                    }
+                }
+            }
+
+            // If we finish the column still "in_colored_region", finalize it up to the bottom
+            if in_colored_region {
+                // Let y2 be the last row in the thumbnail
+                let candidate_y2 = height - 1;
+                if candidate_y2 > y1 + 10 {
+                    let level0_x = self
+                        .convert_point_from_thumbnail_to_level0(Address {
+                            x: x as u32,
+                            y: y1 as u32,
+                        })
+                        .unwrap()
+                        .x;
+                    let level0_y1 = self
+                        .convert_point_from_thumbnail_to_level0(Address {
+                            x: x as u32,
+                            y: y1 as u32,
+                        })
+                        .unwrap()
+                        .y;
+                    let level0_y2 = self
+                        .convert_point_from_thumbnail_to_level0(Address {
+                            x: x as u32,
+                            y: candidate_y2 as u32,
+                        })
+                        .unwrap()
+                        .y;
+
+                    colored_columns
+                        .entry(level0_x as usize)
+                        .or_insert_with(Vec::new)
+                        .push((level0_y1 as usize, level0_y2 as usize));
+                }
+            }
+        }
+
+        colored_columns
+    }
+
 
     pub fn get_image_rect_boundslevel0(&self) -> Result<ColoredRegions> {
         let thumbnail = self.get_tile_thumbnail(&Size { w: 512, h: 512 }).unwrap();
@@ -506,7 +622,7 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
                 };
 
                 let bounding_box_conv = self
-                    .convert_thumbnail_to_level0(bounding_box.address, bounding_box.size)
+                    .convert_rect_from_thumbnail_to_level0(bounding_box.address, bounding_box.size)
                     .unwrap();
                 regions.push(bounding_box_conv);
             }
@@ -514,7 +630,26 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         Ok(regions)
     }
 
-    pub fn convert_thumbnail_to_level0(
+    pub fn convert_point_from_thumbnail_to_level0(
+        &self,
+        coordinates: Address,
+    ) -> Result<Address> {
+        // Get dimensions of the highest resolution level (level 0)
+        let level0_dimensions = self.slide_level_dimensions[0];
+        let thumbnail_dimensions = Size { w: 512, h: 512 };
+
+        // Calculate the downsampling factors
+        let downsample_factor_x = level0_dimensions.w as f32 / thumbnail_dimensions.w as f32;
+        let downsample_factor_y = level0_dimensions.h as f32 / thumbnail_dimensions.h as f32;
+
+        // Convert thumbnail coordinates to level 0 coordinates
+        Ok(Address {
+            x: (coordinates.x as f32 * downsample_factor_x).round() as u32,
+            y: (coordinates.y as f32 * downsample_factor_y).round() as u32,
+        })
+    }
+
+    pub fn convert_rect_from_thumbnail_to_level0(
         &self,
         thumbnail_coords: Address,
         thumbnail_size: Size,
