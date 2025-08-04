@@ -145,6 +145,12 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
         &self.level_dimensions
     }
 
+    pub fn level_deep_zoom(&self) -> Vec<f64> {
+        (0..self.level_count)
+            .map(|level| level as f64)
+            .collect()
+    }
+
     pub fn level_slides(&self) -> Vec<f64> {
         self.l0_l_downsamples.to_vec()
     }
