@@ -1,5 +1,7 @@
+use crate::{
+    bindings, errors::OpenSlideError, LevelMetadata, OpenSlide, Properties, Region, Result, Size,
+};
 use std::collections::HashMap;
-use crate::{bindings, errors::OpenSlideError, LevelMetadata, OpenSlide, Properties, Region, Result, Size};
 use std::path::Path;
 
 #[cfg(feature = "image")]
@@ -358,17 +360,43 @@ impl Slide for OpenSlide {
         self.get_best_level_for_downsample(downsample)
     }
     fn get_levels_metadata(&self) -> Result<HashMap<usize, LevelMetadata>> {
-        let level_count = self.get_level_count().unwrap();
-        let max_mag = self.properties.openslide_properties.objective_power.unwrap();
+        let level_count = self.get_level_count()?;
         let mpp_x = self.properties.openslide_properties.mpp_x.unwrap() as f64;
+        let max_mag = self.properties.openslide_properties.objective_power;
         let mut levels_metadata = HashMap::new();
         for level in 0..level_count {
             let downsample = self.get_level_downsample(level).unwrap();
-            levels_metadata.insert(level as usize, LevelMetadata{
-                mag: max_mag as f64 / downsample,
-                micro_meter_per_pixel: mpp_x * downsample,
-                level_downsample: downsample,
-            });
+            if self
+                .properties
+                .openslide_properties
+                .objective_power
+                .is_some()
+            {
+                levels_metadata.insert(
+                    level as usize,
+                    LevelMetadata {
+                        mag: max_mag.unwrap() as f64 / downsample,
+                        micro_meter_per_pixel: mpp_x * downsample,
+                        level_downsample: downsample,
+                    },
+                );
+            } else {
+                let mpp_x_rounded = match mpp_x {
+                    mpp_x if mpp_x >= 0.2 && mpp_x < 0.4 => 0.25,
+                    mpp_x if mpp_x >= 0.4 && mpp_x < 0.9 => 0.5,
+                    mpp_x if mpp_x >= 0.9 && mpp_x <= 1.4 => 1.0,
+                    _ => 2.0,
+                };
+
+                levels_metadata.insert(
+                    level as usize,
+                    LevelMetadata {
+                        mag: (10f64 / mpp_x_rounded) / downsample,
+                        micro_meter_per_pixel: mpp_x * downsample,
+                        level_downsample: downsample,
+                    },
+                );
+            }
         }
         Ok(levels_metadata)
     }

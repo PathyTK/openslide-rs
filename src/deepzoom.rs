@@ -5,11 +5,7 @@
 use crate::{errors::OpenSlideError, traits::Slide, utils::{resize_rgb_image, resize_rgba_image}, Address, DeepZoomGenerator, LevelMetadata, Region, Result, Size};
 use image::{RgbImage, RgbaImage};
 use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet};
-use crate::stains::is_pixel_colored;
-use crate::stains::StainingType;
-use crate::union::UnionFind;
-
+use std::collections::{HashMap};
 impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
     pub fn new(slide: B, tile_size: u32, overlap: u32, limit_bounds: bool) -> Result<Self> {
         let nb_level = slide.borrow().get_level_count()?;
@@ -152,6 +148,9 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
 
     pub fn levels_metadata(&self) -> Result<HashMap<usize, LevelMetadata>> {
         self.slide.borrow().get_levels_metadata()
+    }
+    pub fn slide_zoom_levels(&self) -> Vec<u32> {
+        self.slide_from_dz_level.clone()
     }
 
     pub fn tile_count(&self) -> u32 {
