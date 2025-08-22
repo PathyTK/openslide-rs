@@ -1,4 +1,5 @@
-use crate::{bindings, errors::OpenSlideError, OpenSlide, Properties, Region, Result, Size};
+use std::collections::HashMap;
+use crate::{bindings, errors::OpenSlideError, LevelMetadata, OpenSlide, Properties, Region, Result, Size};
 use std::path::Path;
 
 #[cfg(feature = "image")]
@@ -355,6 +356,21 @@ impl Slide for OpenSlide {
 
     fn get_best_level_for_downsample(&self, downsample: f64) -> Result<u32> {
         self.get_best_level_for_downsample(downsample)
+    }
+    fn get_levels_metadata(&self) -> Result<HashMap<usize, LevelMetadata>> {
+        let level_count = self.get_level_count().unwrap();
+        let max_mag = self.properties.openslide_properties.objective_power.unwrap();
+        let mpp_x = self.properties.openslide_properties.mpp_x.unwrap() as f64;
+        let mut levels_metadata = HashMap::new();
+        for level in 0..level_count {
+            let downsample = self.get_level_downsample(level).unwrap();
+            levels_metadata.insert(level as usize, LevelMetadata{
+                mag: max_mag as f64 / downsample,
+                micro_meter_per_pixel: mpp_x * downsample,
+                level_downsample: downsample,
+            });
+        }
+        Ok(levels_metadata)
     }
 
     fn read_image_rgba(&self, region: &Region) -> Result<RgbaImage> {

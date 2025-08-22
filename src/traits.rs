@@ -1,4 +1,5 @@
-use crate::{deepzoom::Bounds, Region, Result, Size};
+use std::collections::HashMap;
+use crate::{deepzoom::Bounds, LevelMetadata, Region, Result, Size};
 #[cfg(feature = "image")]
 use image::{RgbImage, RgbaImage};
 
@@ -20,6 +21,9 @@ pub trait Slide {
 
     /// Get the best level to use for displaying the given downsample factor.
     fn get_best_level_for_downsample(&self, downsample: f64) -> Result<u32>;
+    
+    /// Get levels metadata
+    fn get_levels_metadata(&self) -> Result<HashMap<usize, LevelMetadata>>;
 
     /// Copy pre-multiplied ARGB data from a whole slide image.
     ///

@@ -2,12 +2,7 @@
 //! This module provides functionality for generating Deep Zoom images from `OpenSlide` objects.
 //! This is a simple translation of python `DeepZoomGenerator` implementation
 
-use crate::{
-    errors::OpenSlideError,
-    traits::Slide,
-    utils::{resize_rgb_image, resize_rgba_image},
-    Address, DeepZoomGenerator, Region, Result, Size,
-};
+use crate::{errors::OpenSlideError, traits::Slide, utils::{resize_rgb_image, resize_rgba_image}, Address, DeepZoomGenerator, LevelMetadata, Region, Result, Size};
 use image::{RgbImage, RgbaImage};
 use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
@@ -153,6 +148,10 @@ impl<S: Slide, B: Borrow<S>> DeepZoomGenerator<S, B> {
 
     pub fn level_slides(&self) -> Vec<f64> {
         self.l0_l_downsamples.to_vec()
+    }
+
+    pub fn levels_metadata(&self) -> Result<HashMap<usize, LevelMetadata>> {
+        self.slide.borrow().get_levels_metadata()
     }
 
     // get scale

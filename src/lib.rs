@@ -82,3 +82,10 @@ pub struct Address {
     pub x: u32,
     pub y: u32,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct LevelMetadata {
+    pub mag: f64,
+    pub micro_meter_per_pixel: f64,
+    pub level_downsample: f64,
+}
